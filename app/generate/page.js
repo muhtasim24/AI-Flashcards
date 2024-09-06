@@ -3,6 +3,7 @@
 'use client'
 
 import { useUser } from "@clerk/nextjs"
+import { getDoc, writeBatch } from "firebase/firestore"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 
@@ -43,4 +44,43 @@ export default function Generate(){
         setOpenI(false)
     }
 
+    const saveFlashcards = async () => {
+        if (!name) {
+            alert('Please enter a name')
+            return
+        }
+
+        const batch = writeBatch(db)
+        const userDocRef = doc(collection(db, 'users'), user.id) // user id 
+        const docSnap = await getDoc(userDocRef) // get document snapshot
+        
+        // if docSnap exists
+        if(docSnap.exists()) {
+            const collections = docSnap.data().flashcards || []
+            if (collections.find((f) => f.name === name)) {
+                alert("Flashcard collection with the same name already exists.")
+                return
+            }
+            else {
+                collections.push({name})
+                batch.set(userDocRef, {flashcards: collections}, {merge: true}) // set merge to true so we dont overwrite any previous data
+            }
+        }
+        // if doesnt exists, set it
+        else {
+            batch.set(userDocRef, {flashcards: [{name}]})
+        }
+        
+        // need to actually set each individual flashcard, above is just the name
+        const colRef = collection(userDocRef, name) // collection for name of flashcards and collection of flashcards themselves
+        flashcards.forEach((flashcard) => {
+            const cardDocRef = doc(colRef)
+            batch.set(cardDocRef, flashcard)
+        })
+
+        // using batches, so we dont have to write the flashcards one by one
+        await batch.commit()
+        handleClose()
+        router.push('/flashcards') // pushes to flashcard page
+    }
 }   
